@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext" /* or at least ES2015 */,
+    "module": "ESNext" /* or at least ES2015 */,
+    "lib": ["dom"] /* <-- required! */,
+    "jsx": "preserve" /* <-- required! */,
+    "moduleResolution": "node" /* <-- required! */,
+
+    /* for mixed ts/js codebase */
+    "allowJs": true,
+    "outDir": "./build" /* this won't be used by ts-loader */
+    /* other options... */
+  }
+}
