@@ -106,7 +106,7 @@ The logic of the project might seem a little ridiculous since it was not the aim
 
 Before going further imagine that in a different file you already defined the type of the Store and the types of the messages that can be passed to the store.
 
-```typescript jsx
+```typescript
 /// ./src/redux/index.ts
 /**
  * The main type of the store
