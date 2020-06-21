@@ -1,27 +1,86 @@
 ---
 title: Strong Typed Redux
-date: "2020-04-13T22:12:03.284Z"
+date: "2020-06-21T22:12:03.284Z"
 description: "Strong typed wrapper for redux"
 ---
 
-# Strong typed wrapper for Redux using Typescript
-
-- TODO: Find a normal name
+# Strong Typed Redux
 
 ## Introduction
 
-### TL;DR
+There are several known approaches of adding a typed wrapper around the redux API.
+In our current project we've developed an in-house approach that allows to create HOCs and hooks
+at the same time. This allowed us to switch from class components to functional component
+(or vice-versa) very easy, without having to rewrite the HOCs and hooks.
 
-The article explains the whole process of adding a typed wrapper around the default
-redux methods. If you don't really need the whole ceremony of the article you can
-skip directly to the source code
+Besides trying to explain how this approach works. One aim of the article is to show
+how to develop powerful typed interfaces around existing Javascript libraries, or at least
+how we did it in this specific case.
+
 [github.com/nicu-chiciuc/redux-with-connect](https://github.com/nicu-chiciuc/redux-with-connect).
+
+### TL;DR
 
 Below is an example of the pattern is use:
 
 ```typescript
-// TODO: Add example here
+
+/**
+ * Create both the HOC and the hook at the same time
+ */
+export const [withConnectedTodos, useConnectedTodos] = bothConnect(
+  ({ todos: { todos } }) => ({
+    // map state to props
+    mainTodos: todos.filter((todo) => todo.state !== "cancelled"),
+    cancelledTodos: todos.filter((todo) => todo.state === "cancelled"),
+  }),
+  {
+    // map dispatch to props
+    markAsDone: markAsDoneAction,
+    cancelTodo: cancelTodoAction,
+    saveTodo: saveTodoAction,
+  }
+);
+
+// Extract the inferred type without actually typing the props
+export type WithConnectedTodos = ExtractConnect<typeof withConnectedTodos>;
+
+// Inside another JSX file
+
+/**
+ * Props that will be received from the outside
+ */
+type OuterProps = { mainTitle: string };
+
+/**
+ * All the props that the component will have access to
+ */
+type Props = OuterProps & WithConnectedTodos;
+
+class Todos extends React.Component<Props, State> {
+...
+}
+// The return type will be `React.Component<OuterProps>`
+export default withConnectedTodos(Todos);
+
+// Or for a functional component
+
+function TodosFn(props: OuterProps) {
+  const [tempTodoTitle, setTodoTitle] = useState("");
+  const todoProps = useConnectedTodos();
+...
+}
+
 ```
+
+The `bothConnect` function works simliar to the default `connect` function from `react-redux`,
+but it doesn't require explicit typing and creates both a HOC and a hook at the same time.
+Also the `ExtractConnected` conditional type can extract the type of the props that will
+be available:
+![ExtractConnected](./extract-connect.png)
+
+This allowed us to speed up some aspects of development by implicitly typing the HOCs
+and by allowing to switch to a functional component if necessary.
 
 ## Intro to Redux
 
@@ -171,7 +230,7 @@ Basically we created the type `OtherType` conditionally based on whether we coul
 
 ## [Inferring types](https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-inference-in-conditional-types)
 
-Imagine that you are a simple function:
+Imagine that you have a simple function:
 
 ```typescript
 function simpleFunction(): boolean {
@@ -184,7 +243,7 @@ And somewhere else you have some variable (variable `something`), and you want t
 Of course, in this case you can just say that:
 
 ```typescript
-const frick: boolean = true
+const something: boolean = true
 ```
 
 But imagine that the function returned some other type and you don't really want to import another type and memorize it and whatnot. You just want to say that the variable `something` should always have the type as the return type of the `simpleFunction`.
@@ -307,3 +366,229 @@ If we decide to change what exactly is `UseConnected` in the future, maybe it wi
 All in all, the goal was to trick TS into doing stuff for us, instead of us defining types all the time.
 
 ## Function overloading
+
+Back to our problem. You probably noticed that we are force to ALWAYS pass both arguments to useConnected. That could be an ok down-side, but it's kinda annoying. It would be much easier if TS would take care of that for us because when using connect you have 3 obvious choices:
+
+```typescript
+connect(mapStateToProps)
+connect(null, mapDispatchToProps)
+connect(mapStateToProps, mapDispatchToProps)
+```
+
+I couldn't find a good solution for this so I just gave default arguments to the type parameters:
+
+```typescript
+import { ComponentType } from "react"
+import { connect } from "react-redux"
+import { StoreType } from "../store"
+
+export type UseConnected<OtherProps> = <TProps>(
+  Component: ComponentType<TProps & OtherProps>
+) => ComponentType<TProps>
+
+export type ExtractConnect<Something> = Something extends UseConnected<infer R>
+  ? R
+  : never
+
+/**
+ * This function works in the same way as the connect() from react-redux
+ * but is more strict, knows the type of the store, and also allows to extract it's types very
+ * easily using ExtractConnect
+ */
+export const withConnect = <PropsFromStore = {}, PropsDispatch = {}>(
+  mapStateToProps: null | ((store: StoreType) => PropsFromStore),
+  mapDispatchToProps?: PropsDispatch
+) => {
+  return connect(mapStateToProps, mapDispatchToProps) as UseConnected<
+    PropsFromStore & PropsDispatch
+  >
+}
+```
+
+But after some time I realized that [function overloading](https://www.typescriptlang.org/docs/handbook/functions.html#overloads) can be used. I guess there could be other options (using unions of tuples for the arguments but I guess that didn't really click at the time).
+
+```typescript
+// prettier-ignore
+export function withConnect<PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: null, mapDispatchToProps: PropsDispatch): WithConnected<PropsDispatch>;
+// prettier-ignore
+export function withConnect<PropsFromStore extends {} = {}>(mapStateToProps: (store: StoreType) => PropsFromStore, mapDispatchToProps?: undefined): WithConnected<PropsFromStore>;
+// prettier-ignore
+export function withConnect<PropsFromStore extends {} = {}, PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: (store: StoreType) => PropsFromStore, mapDispatchToProps: PropsDispatch): WithConnected<PropsFromStore & PropsDispatch>;
+
+export function withConnect<
+  PropsFromStore extends {} = {},
+  PropsDispatch extends ObjectWithMessages = {}
+>(
+  mapStateToProps: null | ((store: StoreType) => PropsFromStore),
+  mapDispatchToProps?: PropsDispatch
+) {
+  return connect(mapStateToProps, mapDispatchToProps)
+}
+```
+
+The idea behind function overloads is that, when creating types for some functions, you can say that if the function gets a particular parameter it will return a different output, for example:
+![Function overloading](./overloading.png)
+
+It's not really an overload in the OOP sense, you still have just one function, but you can define multiple definitions for it and TS will handle the rest. The problem is that the function implementation has to support a union of all the possible arguments for all its overloads.
+
+In the case of `withConnect` I was trying to say that you can call it in 3 different ways (as mentioned before) and it will act a little bit different in each case. If you didn't pass anything for the second argument, the function will return a simpler definition instead of doing something silly.
+
+## The time of `hooks`
+
+Around that time hooks appeared on the horizon and they came we new stuff. Instead of using `connect` they adviced to use `useActions` and `useSelector`. Defining wrappers for these was simpler since you didn't need overloads and all that crap.
+
+```typescript
+export function useConnect<T>(mapStateToProps: (store: StoreType) => T): T {
+  return useSelector(mapStateToProps)
+}
+
+export function useActions<T extends {}>(actions: T): T {
+  const dispatch = useDispatch()
+
+  const boundDispatches = Object.entries<() => void>(actions).map(
+    ([prop, value]) => {
+      return [prop, bindActionCreators(value, dispatch)]
+    }
+  )
+
+  return Object.fromEntries(boundDispatches)
+}
+```
+
+Notice my very nice choice of reusing the same name for `useConnect` and making the matters even more confusing.
+
+Of course `react-redux` removed `useActions` and advised the usage of `useDispatch`:
+
+But we shouldn't really care what Abramov says.
+
+I wanted to use the hook things just as I was already using the HOC things. Even `useConnect` and `useActions` seemed like too many functions. I wanted to define things just as I was defining them for HOCS.
+
+So I created a function that could be passed the same arguments as `withConnect`:
+
+```typescript
+// prettier-ignore
+export function createUseConnect<PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: null, mapDispatchToProps: PropsDispatch): UseConnected<PropsDispatch>;
+// prettier-ignore
+export function createUseConnect<PropsFromStore extends {} = {}>(mapStateToProps: (store: StoreType) => PropsFromStore, mapDispatchToProps?: undefined): UseConnected<PropsFromStore>;
+// prettier-ignore
+export function createUseConnect<PropsFromStore extends {} = {}, PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: (store: StoreType) => PropsFromStore, mapDispatchToProps: PropsDispatch): UseConnected<PropsFromStore & PropsDispatch>;
+
+export function createUseConnect<
+  PropsFromStore extends {} = {},
+  PropsDispatch extends ObjectWithMessages = {}
+>(
+  mapStateToProps: null | ((store: StoreType) => PropsFromStore),
+  mapDispatchToProps?: PropsDispatch
+) {
+  // This is done for performance reasons so that redux does not rerender the methods that don't care about some stuff
+
+  if (mapStateToProps && mapDispatchToProps) {
+    return () => ({
+      ...useSelect(mapStateToProps),
+      ...useActions(mapDispatchToProps),
+    })
+  }
+
+  if (mapStateToProps && !mapDispatchToProps) {
+    return () => useSelect(mapStateToProps)
+  }
+
+  if (mapDispatchToProps && !mapStateToProps) {
+    return () => useActions(mapDispatchToProps)
+  }
+
+  return () => ({})
+}
+```
+
+Just as you would do something like
+
+```typescript
+const withWhatever = withConnect(null, {whatever => {type: 'something}});
+```
+
+and then wrap a component with it, I wanted to create a hook in the same way:
+
+```typescript
+const useWhatever = createUseConnect(null, {whatever => {type: 'something}});
+```
+
+And then use `useWhatever` as a hook inside a function component and not think about it.
+
+The definition is not perfect of course because we kinda have 3 options for the function but TS thinks that we should also react to the case when someone passes something else so we return a hook that returns an object `{}`.
+
+# `bothConnect`
+
+As you might observe, the HOC and the hooks are defined in almost the same way so I was thinking, why should I define the same thing twice, it would be cooler if we could just say what we want it to have from redux and then make it exist. So that was the idea behind `bothConnect`
+
+```typescript
+export type WithModalProps = ExtractConnect<typeof withModal>
+
+export const [withModal, useModal] = bothConnect(null, {
+  openModal,
+  closeModal,
+})
+```
+
+Here both the HOC `withModal` and the hook `useModal` are created at the same time. And the type `WithModalProps` is extracted automagically from one of them. This seems like the minimal amount of code necessary.
+
+`bothConnect` was more annoying to implement since TS doesn't seem to like overloaded functions very much even though it seems clear that they should work. I could of course used `any` or `@ts-ignore` but real men don't do it like that.
+
+```typescript
+// prettier-ignore
+export function bothConnect<PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: null, mapDispatchToProps: PropsDispatch): BothTypeConnect<PropsDispatch>;
+// prettier-ignore
+export function bothConnect<PropsFromStore extends {} = {}>(mapStateToProps: (store: StoreType) => PropsFromStore): BothTypeConnect<PropsFromStore>;
+// prettier-ignore
+export function bothConnect<PropsFromStore extends {} = {}, PropsDispatch extends ObjectWithMessages = {}>(mapStateToProps: (store: StoreType) => PropsFromStore, mapDispatchToProps: PropsDispatch): BothTypeConnect<PropsFromStore & PropsDispatch>;
+
+export function bothConnect<
+  PropsFromStore extends {} = {},
+  PropsDispatch extends ObjectWithMessages = {}
+>(
+  mapStateToProps: null | ((store: StoreType) => PropsFromStore),
+  mapDispatchToProps?: PropsDispatch
+) {
+  if (mapStateToProps && mapDispatchToProps) {
+    return [
+      withConnect(mapStateToProps, mapDispatchToProps),
+      createUseConnect(mapStateToProps, mapDispatchToProps),
+    ]
+  }
+
+  if (mapStateToProps && !mapDispatchToProps) {
+    return [
+      withConnect(mapStateToProps, mapDispatchToProps),
+      createUseConnect(mapStateToProps, mapDispatchToProps),
+    ]
+  }
+
+  if (mapDispatchToProps && !mapStateToProps) {
+    return [
+      withConnect(mapStateToProps, mapDispatchToProps),
+      createUseConnect(mapStateToProps, mapDispatchToProps),
+    ]
+  }
+
+  // INFO: Practically the inner functions already check for null/undefined and theoretically it would've been
+  // necessary just 1 single line of code but Typescript (or me) cannot understand how to handle inner overloaded
+  // functions and as such this hacky way was needed
+
+  throw new Error("bothConnect passed both arguments that are null/undefined")
+}
+```
+
+As you can see, TS is very nice and forces me to define the same code several times, but alas. That is the price for having a nice kitchen, sometimes the plumbing is full of shit.
+
+I also used a tuple because the return values didn't really have any meaningful implicit names.
+
+Some things could be tidied up, but it kinda worked and adding new stuff wasn't very hard.
+
+# Final words
+
+Not all TS is like this. It usually happens when an older JS API is given new types, things get messy real fast. But it seems to be easier to keep the plumbing in a single place instead of letting it run all over the kitchen.
+
+In the next part I will touch on more advanced problems that have arisen after some usage:
+
+- How to type `redux-thunk`
+- How to memoize functions returned from `useActions` so that components don't reload all the time
