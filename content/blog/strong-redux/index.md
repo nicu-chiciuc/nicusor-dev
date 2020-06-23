@@ -4,10 +4,9 @@ date: "2020-06-21T22:12:03.284Z"
 description: "Strong typed wrapper for redux"
 ---
 
-
 There are several known ways (most notably Redux Toolkit) of adding a typed wrapper around the redux API.
 
-In our current project we've developed an in-house approach that makes it possible to create HOCs and hooks at the same time. This allowed us to switch from class components to functional component (and vice-versa) very easy, without having to rewrite redefine the HOCs and hooks.
+In our current project we've developed an in-house approach that makes it possible to create HOCs and hooks at the same time. This allowed us to switch from class components to functional component (and vice-versa) very easy, without having to rewrite the HOCs and hooks.
 
 Besides trying to explain how this approach works. One aim of the article is to show
 how to develop powerful typed interfaces around existing Javascript libraries, or at least
@@ -79,7 +78,7 @@ export default withConnectedTodos(Todos);
 
 function TodosFn(props: OuterProps) {
   const [tempTodoTitle, setTodoTitle] = useState("");
-  
+
   /**
    * todoProps will implicitly have a type of `WithConnectedTodos`
    */
@@ -93,6 +92,7 @@ The `bothConnect` function works simliarly to the default `connect` function fro
 but it doesn't require explicit typing and creates both a HOC and a hook at the same time.
 Also the `ExtractConnected` conditional type can extract the type of the props that will
 be available:
+
 ![ExtractConnected](./extract-connect.png)
 
 This allowed us to speed up some aspects of development by implicitly typing the HOCs
@@ -113,7 +113,7 @@ There is much more to it and I recommend checking out [the official documentatio
 
 ### The sample project
 
-The article is bassed on an internal article publishing inside the company I currently work for.
+The article is based on an internal article published inside the company I currently work for.
 To make the code more palatable, I've created a
 [very small project which uses Redux](https://github.com/nicu-chiciuc/redux-with-connect).
 The logic of the project might seem a little ridiculous since it was not the aim of project (and also because it seems that I'm quite bad at creating random projects).
@@ -192,7 +192,7 @@ export default connectedTodos(Todos)
 
 As you can see, we tell it that `store` has the type `StoreType` and now, if we happen to change something in the `StoreType`, Typescript will scream until we fix everything we need to fix.
 
-I guess this approach could work, but it seems too cumbersome, what if you forget to give `store` it's correct type. The `connect` function should know by default that `store` can only have one type. Unfortunately, the `react-redux` developers didn't know how our store will look and opening a PR each time we change something could be kinda annoying.
+I guess this approach could work, but it seems too cumbersome, what if you forget to give `store` its correct type. The `connect` function should know by default that `store` can only have one type. Unfortunately, the `react-redux` developers didn't know how our store will look and opening a PR each time we change something could be kinda annoying.
 
 So here was the idea, what if, we create another function which will act exactly the same as `connect` but would always know that `store` has to have the type `StoreType` and that all the function in the second argument have to return an `MessageType`.
 
@@ -237,6 +237,7 @@ T extends U ? X : Y
 I recommend trying [the Typescript Playground](https://www.typescriptlang.org/play/) to check how things work.
 
 Conditional types are usually useful when you create typings for things that were initially written in JS and have a more complex interface. Or, when you want to write indecipherable code and then write blog posts about it.
+
 ![Conditional type example](./example01.png)
 
 Basically we created the type `OtherType` conditionally based on whether we could assign `SomeType` to `red`. You might ask yourself, what does `extends` exactly mean in this context. In short, nobody really knows and you usually need to poke it until it makes sense. The way I finally started to think about it is that when writing `A extends B ?...` you're asking yourself (or the compiler) if you have some object of type `A` can you pass it to a function that accepts a type `B`? In practice though, you usually have to test things out and use the playground until things kinda work.
@@ -274,6 +275,7 @@ type ReturnType<T> = T extends () => infer R ? R : never
 This is (almost) the complete definition of `ReturnType`. Generally when thinking about generics in TS, think about them like functions that act on types instead of trying to fit in the OOP model (that usually helps with sleep too).
 
 This means that, if you give me some type `T` and we somehow see that type `T` is some kind of function that return a `infer R`, then I return `R` otherwise return `never`. The actual definition of `ReturnType` in the document
+
 ![ReturnType](./example02.png)
 
 `infer` only works with conditional types and the only (I think) use-case that I know of is to extract stuff from other types. These things only start to make sense after you try to use them and fail to do so for several months.
@@ -300,7 +302,7 @@ There are other ways to do it, but this approach usually works the best.
 
 > A lot of APIs use `Omit<T,K>`, `Exclud<T, U>` etc. But those approaches seem to cause more confusion down the road.
 
-Basically the function `withLoading` should be passed a component that has some props of type `TProps` and also MUST have a prop `loading` of type `boolean` and will return another component that should be passed just props of type `TProps`. The return component shouldn't be passed the prop `loading` since we send it internally. 
+Basically the function `withLoading` should be passed a component that has some props of type `TProps` and also MUST have a prop `loading` of type `boolean` and will return another component that should be passed just props of type `TProps`. The return component shouldn't be passed the prop `loading` since we send it internally.
 
 It looks kinda cryptic, but it allows to model how components actually work.
 
@@ -334,12 +336,12 @@ export const withConnect = <PropsFromStore, PropsDispatch, TProps>(
 ): UseConnected<PropsFromStore & PropsDispatch> => <TProps>(
   Component: ComponentType<TProps & PropsFromStore & PropsDispatch>
 ): ComponentType<TProps> => {
-  return connect(mapStateToProps, mapDispatchToProps)(Component as any);
-};
-
+  return connect(mapStateToProps, mapDispatchToProps)(Component as any)
+}
 ```
 
 And here is a shorter implementation that accomplishes the same goal.
+
 ```typescript
 export const withConnect: <PropsFromStore, PropsDispatch>(
   mapStateToProps: (store: StoreType) => PropsFromStore,
@@ -348,6 +350,7 @@ export const withConnect: <PropsFromStore, PropsDispatch>(
 ```
 
 Here is a third way of writing it. If think this one should be the most clear one:
+
 ```typescript
 export function withConnect<PropsFromStore, PropsDispatch>(
   mapStateToProps: (store: StoreType) => PropsFromStore,
@@ -355,7 +358,7 @@ export function withConnect<PropsFromStore, PropsDispatch>(
 ) {
   return connect(mapStateToProps, mapDispatchToProps) as UseConnected<
     PropsFromStore & PropsDispatch
-  >;
+  >
 }
 ```
 
@@ -372,6 +375,7 @@ This HOC (Higher-order component) could just replace the usage of `connect` sinc
 `connect` is a function that gets a `mapStateToProps` and a `mapDispatchtoProps` and returns another function that should get a react component which should have some props that should include the `PropsFromStore` and `PropsDispatch` and it will return a component that has to be passed just the `TProps` without the props from redux.
 
 This is a handful, but the definition is much much terse than the one in the official package:
+
 ![Connect definition](./connect_definition.png)
 
 It goes on and on. If we decide to not use `defaultProps`, we can get away with defining very specific types that are complex, but not extremely complex.
@@ -379,6 +383,7 @@ It goes on and on. If we decide to not use `defaultProps`, we can get away with 
 So why the need to define a `UseConnected<T>`?
 
 The idea was that instead of defining the types that should be given from the `connect` function, I would like to have a inferred type so that I wouldn't need to give the types explicitly. Check this out:
+
 ![Type inferrence](./type_inferrence.png)
 
 Now we can define the `Props` without actually writing any types:
@@ -465,6 +470,7 @@ export function withConnect<
 ```
 
 The idea behind function overloads is that, when creating types for some functions, you can say that if the function gets a particular parameter it will return a different output, for example:
+
 ![Function overloading](./overloading.png)
 
 It's not really an overload in the OOP sense, you still have just one function, but you can define multiple definitions for it and TS will handle the rest. The problem is that the function implementation has to support a union of all the possible arguments for all its overloads.
@@ -479,15 +485,15 @@ When hooks appeared on the horizong I realized that this approach could be exten
 export function useSelect<T extends {} = {}>(
   mapStateToProps: (store: StoreType) => T
 ): T {
-  return useSelector(mapStateToProps);
+  return useSelector(mapStateToProps)
 }
 
 export function useActions<T extends ObjectWithMessages = {}>(actions: T): T {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch()
 
-  const boundDispatches = bindActionCreators(actions, dispatch);
+  const boundDispatches = bindActionCreators(actions, dispatch)
 
-  return boundDispatches;
+  return boundDispatches
 }
 ```
 
@@ -564,7 +570,7 @@ export const [withModal, useModal] = bothConnect(null, {
 })
 ```
 
-Here both the HOC `withModal` and the hook `useModal` are created at the same time. And the type `WithModalProps` is extracted automagically from one of them. This seems like the minimal amount of code necessary. 
+Here both the HOC `withModal` and the hook `useModal` are created at the same time. And the type `WithModalProps` is extracted automagically from one of them. This seems like the minimal amount of code necessary.
 
 `bothConnect` was more annoying to implement since TS doesn't seem to like overloaded functions very, much even though it seems clear that they should work. I could of course used `any` or `@ts-ignore` but real men don't do it like that.
 
